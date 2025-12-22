@@ -21,7 +21,7 @@ run: flash
 	@$(IDF_ENV) idf.py monitor
 
 dump:
-	@$(IDF_ENV) xtensa-esp32s3-elf-objdump -dS build/monolith.elf
+	@$(IDF_ENV) riscv32-esp-elf-objdump -dS build/damppi.elf
 
 clean:
 	rm -rf build
