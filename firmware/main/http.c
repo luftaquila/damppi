@@ -1,15 +1,9 @@
-#include "esp_log.h"
 #include "esp_http_server.h"
-
-#include "nvs_flash.h"
 #include "lwip/sockets.h"
 
+#include "main.h"
+
 extern nvs_handle_t nvs;
-extern char ssid[32];
-extern char pass[32];
-extern char name[32];
-extern char server[16];
-extern char hostname[16];
 
 static const char *TAG = "HTTP";
 
@@ -138,7 +132,6 @@ esp_err_t save_post(httpd_req_t *req) {
   }
 
   body[total] = '\0';
-  ESP_LOGI(TAG, "POST body: %s", body);
 
   char new_ssid[32]   = { 0 };
   char new_pass[32]   = { 0 };

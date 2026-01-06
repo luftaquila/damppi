@@ -1,16 +1,10 @@
-#include "esp_log.h"
 #include "esp_wifi.h"
-
 #include "lwip/ip4_addr.h"
+
+#include "main.h"
 
 void dns_server(void *arg);
 void http_server(bool ap_mode);
-
-extern char ssid[32];
-extern char pass[32];
-extern char name[32];
-extern char server[16];
-extern char hostname[16];
 
 static const char *TAG = "NET";
 
@@ -46,6 +40,7 @@ void wifi_softap(void) {
   ESP_ERROR_CHECK(esp_wifi_start());
 
   ESP_LOGI(TAG, "SoftAP SSID: %s", wifi.ap.ssid);
+  lcd_printf(LV_FONT(30), "Wi-Fi SSID\n%s", wifi.ap.ssid);
 
   xTaskCreate(dns_server, "dns_server", 4096, NULL, 5, NULL);
   http_server(true);
@@ -93,6 +88,7 @@ void wifi_sta(const char *ssid, const char *pass) {
 
   if (esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK) {
     ESP_LOGI(TAG, "STA IP: " IPSTR, IP2STR(&ip.ip));
+    lcd_printf(LV_FONT(24), "Wi-Fi: %s\nSERVER: %s\nIP: " IPSTR "\n%s", ssid, server, IP2STR(&ip.ip), name);
   }
 
   http_server(false);

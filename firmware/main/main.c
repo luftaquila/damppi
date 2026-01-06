@@ -1,13 +1,14 @@
-#include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
 #include "esp_system.h"
-
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "lwip/sockets.h"
 
+#include "main.h"
+
 esp_err_t lcd_init(void);
+
 void wifi_softap(void);
 void wifi_sta(const char *ssid, const char *pass);
 

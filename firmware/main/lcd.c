@@ -1,9 +1,7 @@
-#include "esp_log.h"
 #include "esp_lcd_io_spi.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_st7789.h"
 #include "esp_lvgl_port.h"
-
 #include "driver/gpio.h"
 
 #define LCD_WIDTH 172
@@ -11,6 +9,26 @@
 #define BACKLIGHT GPIO_NUM_22
 
 extern const lv_image_dsc_t logo;
+
+void lcd_printf(const lv_font_t *font, const char *fmt, ...) {
+  lvgl_port_lock(0);
+
+  lv_obj_clean(lv_screen_active());
+
+  lv_obj_t *label = lv_label_create(lv_screen_active());
+
+  va_list ap;
+  va_start(ap, fmt);
+  lv_label_set_text_vfmt(label, fmt, ap);
+  va_end(ap);
+
+  lv_obj_set_style_text_color(label, lv_color_white(), 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_font(label, font, 0);
+  lv_obj_center(label);
+
+  lvgl_port_unlock();
+}
 
 esp_err_t lcd_init(void) {
   spi_bus_config_t spi = {
@@ -88,13 +106,10 @@ esp_err_t lcd_init(void) {
   lvgl_port_add_disp(&disp_cfg);
 
   lvgl_port_lock(0);
-
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
-
   lv_obj_t *img = lv_image_create(lv_screen_active());
   lv_image_set_src(img, &logo);
   lv_obj_center(img);
-
   lvgl_port_unlock();
 
   return ESP_OK;
