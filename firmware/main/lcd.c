@@ -8,26 +8,68 @@
 #define LCD_HEIGHT 320
 #define BACKLIGHT GPIO_NUM_22
 
+#define UI_QUEUE_LEN 4
+#define MAX_TEXT_LEN 128
+
 extern const lv_image_dsc_t logo;
 
+static esp_lcd_panel_handle_t lcd = NULL;
+static QueueHandle_t ui_queue     = NULL;
+static lv_obj_t *ui_label         = NULL;
+
+typedef struct {
+  const lv_font_t *font;
+  char text[MAX_TEXT_LEN];
+} ui_msg_t;
+
+void ui_task(void *arg) {
+  ui_msg_t msg;
+  TickType_t wait = portMAX_DELAY;
+  bool first      = true;
+
+  while (true) {
+    if (xQueueReceive(ui_queue, &msg, wait)) {
+      gpio_set_level(BACKLIGHT, 1);
+      esp_lcd_panel_disp_on_off(lcd, true);
+
+      lvgl_port_lock(0);
+
+      if (first) {
+        lv_obj_clean(lv_screen_active());
+
+        ui_label = lv_label_create(lv_screen_active());
+        lv_obj_set_style_text_color(ui_label, lv_color_white(), 0);
+        lv_obj_set_style_text_align(ui_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text(ui_label, "");
+
+        first = false;
+      }
+
+      lv_obj_set_style_text_font(ui_label, msg.font, 0);
+      lv_label_set_text(ui_label, msg.text);
+      lv_obj_center(ui_label);
+
+      lvgl_port_unlock();
+
+      wait = pdMS_TO_TICKS(5000);
+    } else {
+      esp_lcd_panel_disp_on_off(lcd, false);
+      gpio_set_level(BACKLIGHT, 0);
+      wait = portMAX_DELAY;
+    }
+  }
+}
+
 void lcd_printf(const lv_font_t *font, const char *fmt, ...) {
-  lvgl_port_lock(0);
-
-  lv_obj_clean(lv_screen_active());
-
-  lv_obj_t *label = lv_label_create(lv_screen_active());
+  ui_msg_t msg;
+  msg.font = font;
 
   va_list ap;
   va_start(ap, fmt);
-  lv_label_set_text_vfmt(label, fmt, ap);
+  vsnprintf(msg.text, MAX_TEXT_LEN, fmt, ap);
   va_end(ap);
 
-  lv_obj_set_style_text_color(label, lv_color_white(), 0);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_font(label, font, 0);
-  lv_obj_center(label);
-
-  lvgl_port_unlock();
+  xQueueSend(ui_queue, &msg, pdMS_TO_TICKS(10));
 }
 
 esp_err_t lcd_init(void) {
@@ -55,7 +97,6 @@ esp_err_t lcd_init(void) {
 
   ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &lcd_io_config, &lcd_io));
 
-  esp_lcd_panel_handle_t lcd         = NULL;
   esp_lcd_panel_dev_config_t lcd_cfg = {
     .reset_gpio_num = GPIO_NUM_21,
     .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_RGB,
@@ -105,12 +146,13 @@ esp_err_t lcd_init(void) {
 
   lvgl_port_add_disp(&disp_cfg);
 
-  lvgl_port_lock(0);
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   lv_obj_t *img = lv_image_create(lv_screen_active());
   lv_image_set_src(img, &logo);
   lv_obj_center(img);
-  lvgl_port_unlock();
+
+  ui_queue = xQueueCreate(UI_QUEUE_LEN, sizeof(ui_msg_t));
+  xTaskCreate(ui_task, "ui", 4096, NULL, 5, NULL);
 
   return ESP_OK;
 }
