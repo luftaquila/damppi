@@ -20,6 +20,7 @@ static lv_obj_t *ui_label         = NULL;
 typedef struct {
   const lv_font_t *font;
   char text[MAX_TEXT_LEN];
+  int timeout;
 } ui_msg_t;
 
 void ui_task(void *arg) {
@@ -45,13 +46,15 @@ void ui_task(void *arg) {
         first = false;
       }
 
-      lv_obj_set_style_text_font(ui_label, msg.font, 0);
-      lv_label_set_text(ui_label, msg.text);
-      lv_obj_center(ui_label);
+      if (msg.text[0]) {
+        lv_obj_set_style_text_font(ui_label, msg.font, 0);
+        lv_label_set_text(ui_label, msg.text);
+        lv_obj_center(ui_label);
+      }
 
       lvgl_port_unlock();
 
-      wait = pdMS_TO_TICKS(5000);
+      wait = msg.timeout ? pdMS_TO_TICKS(msg.timeout) : portMAX_DELAY;
     } else {
       esp_lcd_panel_disp_on_off(lcd, false);
       gpio_set_level(BACKLIGHT, 0);
@@ -60,9 +63,10 @@ void ui_task(void *arg) {
   }
 }
 
-void lcd_printf(const lv_font_t *font, const char *fmt, ...) {
+void lcd_printf(const lv_font_t *font, int timeout, const char *fmt, ...) {
   ui_msg_t msg;
-  msg.font = font;
+  msg.font    = font;
+  msg.timeout = timeout;
 
   va_list ap;
   va_start(ap, fmt);
@@ -117,7 +121,6 @@ esp_err_t lcd_init(void) {
   ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd));
   ESP_ERROR_CHECK(esp_lcd_panel_init(lcd));
 
-  gpio_set_level(BACKLIGHT, true);
   esp_lcd_panel_set_gap(lcd, 0, 34);
   esp_lcd_panel_invert_color(lcd, true);
   esp_lcd_panel_disp_on_off(lcd, true);
@@ -146,10 +149,14 @@ esp_err_t lcd_init(void) {
 
   lvgl_port_add_disp(&disp_cfg);
 
+  lvgl_port_lock(0);
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   lv_obj_t *img = lv_image_create(lv_screen_active());
   lv_image_set_src(img, &logo);
   lv_obj_center(img);
+  lvgl_port_unlock();
+
+  gpio_set_level(BACKLIGHT, true);
 
   ui_queue = xQueueCreate(UI_QUEUE_LEN, sizeof(ui_msg_t));
   xTaskCreate(ui_task, "ui", 4096, NULL, 5, NULL);

@@ -7,6 +7,10 @@
 
 #include "main.h"
 
+#define BTN_DEBOUNCE_MS 50
+#define BTN_MIN_GAP_MS 200
+#define BTN_DBL_CLK_MS 500
+
 esp_err_t lcd_init(void);
 
 void wifi_softap(void);
@@ -21,17 +25,82 @@ char hostname[16];
 
 static const char *TAG = "APP";
 
+static TaskHandle_t btn_task;
 static TaskHandle_t reset_task;
 
+static void IRAM_ATTR btn_isr(void *arg) {
+  static int64_t last_isr_time   = 0;
+  static int64_t last_click_time = 0;
+
+  int64_t now = esp_timer_get_time();
+
+  if (now - last_isr_time < BTN_DEBOUNCE_MS * 1000) {
+    return;
+  }
+
+  last_isr_time = now;
+
+  if (gpio_get_level(GPIO_NUM_23)) {
+    return;
+  }
+
+  int64_t diff = now - last_click_time;
+
+  if (diff < BTN_DBL_CLK_MS * 1000) {
+    if (diff > BTN_MIN_GAP_MS * 1000) {
+      last_click_time = 0;
+      xTaskNotifyFromISR(btn_task, 2, eSetBits, NULL);
+    }
+  } else {
+    last_click_time = now;
+    xTaskNotifyFromISR(btn_task, 1, eSetBits, NULL);
+  }
+
+  portYIELD_FROM_ISR();
+}
+
+static void btn_handler(void *arg) {
+  uint32_t val;
+
+  while (true) {
+    if (xTaskNotifyWait(0, ULONG_MAX, &val, portMAX_DELAY)) {
+      if (val & 1) {
+        lcd_printf(LV_FONT(30), 3000, "");
+      }
+
+      if (val & 2) {
+        // TODO: Implement double click action
+      }
+    }
+  }
+}
+
+static void btn_init(void) {
+  gpio_config_t gpio = {
+    .pin_bit_mask = (1ULL << GPIO_NUM_23),
+    .mode         = GPIO_MODE_INPUT,
+    .pull_up_en   = GPIO_PULLUP_ENABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type    = GPIO_INTR_NEGEDGE,
+  };
+
+  ESP_ERROR_CHECK(gpio_config(&gpio));
+  ESP_ERROR_CHECK(gpio_isr_handler_add(GPIO_NUM_23, btn_isr, NULL));
+
+  xTaskCreate(btn_handler, "btn", 2048, NULL, 10, &btn_task);
+}
+
 static void reset_isr(void *arg) {
-  gpio_num_t pin       = (gpio_num_t)arg;
-  static int64_t press = 0;
+  gpio_num_t pin      = (gpio_num_t)arg;
+  static int64_t last = 0;
 
   if (!gpio_get_level(pin)) {
-    press = esp_timer_get_time();
-  } else if (esp_timer_get_time() - press > (3 * 1000 * 1000)) {
+    last = esp_timer_get_time();
+  } else if (esp_timer_get_time() - last > (3 * 1000 * 1000)) {
     vTaskNotifyGiveFromISR(reset_task, NULL);
   }
+
+  portYIELD_FROM_ISR();
 }
 
 static void reset_handler(void *arg) {
@@ -47,24 +116,24 @@ static void reset_handler(void *arg) {
 }
 
 static void reset_init(void) {
-  const gpio_num_t pin = GPIO_NUM_9;
   gpio_config_t gpio;
 
-  gpio.pin_bit_mask = (1ULL << pin);
+  gpio.pin_bit_mask = (1ULL << GPIO_NUM_9);
   gpio.mode         = GPIO_MODE_INPUT;
   gpio.pull_up_en   = GPIO_PULLUP_ENABLE;
   gpio.pull_down_en = GPIO_PULLDOWN_DISABLE;
   gpio.intr_type    = GPIO_INTR_ANYEDGE;
 
   ESP_ERROR_CHECK(gpio_config(&gpio));
-  ESP_ERROR_CHECK(gpio_install_isr_service(0));
-  ESP_ERROR_CHECK(gpio_isr_handler_add(pin, reset_isr, (void *)pin));
+  ESP_ERROR_CHECK(gpio_isr_handler_add(GPIO_NUM_9, reset_isr, (void *)GPIO_NUM_9));
 
   xTaskCreate(reset_handler, "reset", 2048, NULL, 10, &reset_task);
 }
 
 void app_main(void) {
   lcd_init();
+
+  ESP_ERROR_CHECK(gpio_install_isr_service(0));
   reset_init();
 
   ESP_ERROR_CHECK(nvs_flash_init());
@@ -91,6 +160,7 @@ void app_main(void) {
   if (err != ESP_OK || !ssid[0] || !pass[0] || !name[0] || !server[0] || inet_pton(AF_INET, server, NULL) != 1) {
     wifi_softap();
   } else {
+    btn_init();
     wifi_sta(ssid, pass);
   }
 

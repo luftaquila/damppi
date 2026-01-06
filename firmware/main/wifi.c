@@ -40,9 +40,9 @@ void wifi_softap(void) {
   ESP_ERROR_CHECK(esp_wifi_start());
 
   ESP_LOGI(TAG, "SoftAP SSID: %s", wifi.ap.ssid);
-  lcd_printf(LV_FONT(30), "Wi-Fi SSID\n%s", wifi.ap.ssid);
+  lcd_printf(LV_FONT(30), 0, "Wi-Fi SSID\n%s", wifi.ap.ssid);
 
-  xTaskCreate(dns_server, "dns_server", 4096, NULL, 5, NULL);
+  xTaskCreate(dns_server, "dns_server", 4096, NULL, 10, NULL);
   http_server(true);
 }
 
@@ -88,7 +88,7 @@ void wifi_sta(const char *ssid, const char *pass) {
 
   if (esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK) {
     ESP_LOGI(TAG, "STA IP: " IPSTR, IP2STR(&ip.ip));
-    lcd_printf(LV_FONT(24), "Wi-Fi: %s\nSERVER: %s\nIP: " IPSTR "\n%s", ssid, server, IP2STR(&ip.ip), name);
+    lcd_printf(LV_FONT(24), 5000, "Wi-Fi: %s\nSERVER: %s\nIP: " IPSTR "\n%s", ssid, server, IP2STR(&ip.ip), name);
   }
 
   http_server(false);

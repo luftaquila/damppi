@@ -17,8 +17,8 @@ build:
 flash: build
 	@$(IDF_ENV) idf.py -b 921600 flash
 
-run: flash
-	@$(IDF_ENV) idf.py monitor
+run: build
+	@$(IDF_ENV) idf.py -b 921600 flash monitor
 
 dump:
 	@$(IDF_ENV) riscv32-esp-elf-objdump -dS build/damppi.elf

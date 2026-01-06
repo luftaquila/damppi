@@ -13,6 +13,6 @@ extern char name[32];
 extern char server[16];
 extern char hostname[16];
 
-void lcd_printf(const lv_font_t *font, const char *fmt, ...);
+void lcd_printf(const lv_font_t *font, int timeout, const char *fmt, ...);
 
 #endif // MAIN_H
