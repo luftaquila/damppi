@@ -6,8 +6,8 @@
 #include "driver/gpio.h"
 #include "lwip/sockets.h"
 
-void start_softap_portal(void);
-void start_sta_and_web(const char *ssid, const char *pass);
+void wifi_softap(void);
+void wifi_sta(const char *ssid, const char *pass);
 
 nvs_handle_t nvs;
 char ssid[32];
@@ -18,7 +18,7 @@ char server[16];
 static const char *TAG = "APP";
 
 static void reset_isr(void *arg) {
-  gpio_num_t pin = (gpio_num_t)arg;
+  gpio_num_t pin       = (gpio_num_t)arg;
   static int64_t press = 0;
 
   if (!gpio_get_level(pin)) {
@@ -38,10 +38,10 @@ static void init_reset(void) {
   gpio_config_t gpio;
 
   gpio.pin_bit_mask = (1ULL << pin);
-  gpio.mode = GPIO_MODE_INPUT;
-  gpio.pull_up_en = GPIO_PULLUP_ENABLE;
+  gpio.mode         = GPIO_MODE_INPUT;
+  gpio.pull_up_en   = GPIO_PULLUP_ENABLE;
   gpio.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  gpio.intr_type = GPIO_INTR_ANYEDGE;
+  gpio.intr_type    = GPIO_INTR_ANYEDGE;
 
   ESP_ERROR_CHECK(gpio_config(&gpio));
   ESP_ERROR_CHECK(gpio_install_isr_service(0));
@@ -62,10 +62,10 @@ void app_main(void) {
   err |= nvs_get_str(nvs, "name", name, &size);
   err |= nvs_get_str(nvs, "server", server, &size);
 
-  if (err != ESP_OK || !*ssid || !*name || !*server || inet_pton(AF_INET, server, NULL) != 1) {
-    // start_softap_portal();
+  if (err != ESP_OK || !ssid[0] || !pass[0] || !name[0] || !server[0] || inet_pton(AF_INET, server, NULL) != 1) {
+    wifi_softap();
   } else {
-    // start_sta_and_web(ssid, pass);
+    wifi_sta(ssid, pass);
   }
 
   return;
