@@ -1,99 +1,109 @@
 #include "esp_log.h"
-#include "esp_wifi.h"
+#include "esp_http_server.h"
 
-#include "lwip/ip4_addr.h"
+#include "lwip/sockets.h"
 
-void dns_server(void *arg);
-void http_server(bool ap_mode);
+esp_err_t root_get(httpd_req_t *req);
+esp_err_t save_post(httpd_req_t *req);
+esp_err_t reset_post(httpd_req_t *req);
+esp_err_t redirect_root(httpd_req_t *req);
 
-extern char ssid[32];
-extern char pass[32];
-extern char name[32];
-extern char server[16];
-extern char hostname[16];
+static const char *TAG = "SRV";
 
-static const char *TAG = "NET";
+void dns_server(void *arg) {
+  int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-static EventGroupHandle_t s_wifi_ev = NULL;
+  if (sock < 0) {
+    ESP_LOGE(TAG, "DNS socket create failed");
+    vTaskDelete(NULL);
+    return;
+  }
 
-void wifi_softap(void) {
-  ESP_ERROR_CHECK(esp_netif_init());
-  ESP_ERROR_CHECK(esp_event_loop_create_default());
+  struct sockaddr_in addr = { 0 };
+  addr.sin_family         = AF_INET;
+  addr.sin_port           = htons(53);
+  addr.sin_addr.s_addr    = htonl(INADDR_ANY);
 
-  esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
-  ESP_ERROR_CHECK(esp_wifi_init(&(wifi_init_config_t)WIFI_INIT_CONFIG_DEFAULT()));
-  ESP_ERROR_CHECK(esp_netif_dhcps_stop(ap_netif));
+  if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    ESP_LOGE(TAG, "DNS bind failed");
+    close(sock);
+    vTaskDelete(NULL);
+    return;
+  }
 
-  esp_netif_ip_info_t ip;
-  IP4_ADDR(&ip.ip, 192, 168, 4, 1);
-  IP4_ADDR(&ip.gw, 192, 168, 4, 1);
-  IP4_ADDR(&ip.netmask, 255, 255, 255, 0);
+  uint8_t rx[512];
+  uint8_t tx[512];
 
-  ESP_ERROR_CHECK(esp_netif_set_ip_info(ap_netif, &ip));
-  ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
+  while (true) {
+    struct sockaddr_in from = { 0 };
+    socklen_t fromlen       = sizeof(from);
+    int len                 = recvfrom(sock, rx, sizeof(rx), 0, (struct sockaddr *)&from, &fromlen);
 
-  wifi_config_t wifi = {
-    .ap = {
-      .max_connection = 4,
-      .authmode = WIFI_AUTH_OPEN,
-    },
-  };
+    if (len < 12 || len > (sizeof(tx) - 16)) {
+      continue;
+    }
 
-  snprintf((char *)wifi.ap.ssid, sizeof(wifi.ap.ssid), "%s", hostname);
+    memcpy(tx, rx, len);
+    tx[2] = 0x81;
+    tx[3] = 0x80;  // response, no error
+    tx[6] = 0x00;
+    tx[7] = 0x01;                            // ANCOUNT=1
+    tx[8] = tx[9] = tx[10] = tx[11] = 0x00;  // NS/AR=0
 
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi));
-  ESP_ERROR_CHECK(esp_wifi_start());
+    int p   = len;
+    tx[p++] = 0xC0;
+    tx[p++] = 0x0C;  // NAME ptr
+    tx[p++] = 0x00;
+    tx[p++] = 0x01;  // TYPE A
+    tx[p++] = 0x00;
+    tx[p++] = 0x01;  // CLASS IN
+    tx[p++] = 0x00;
+    tx[p++] = 0x00;
+    tx[p++] = 0x00;
+    tx[p++] = 0x3C;  // TTL
+    tx[p++] = 0x00;
+    tx[p++] = 0x04;  // RDLENGTH
+    tx[p++] = 192;
+    tx[p++] = 168;
+    tx[p++] = 4;
+    tx[p++] = 1;  // 192.168.4.1
 
-  ESP_LOGI(TAG, "SoftAP SSID: %s", wifi.ap.ssid);
-
-  xTaskCreate(dns_server, "dns_server", 4096, NULL, 5, NULL);
-  http_server(true);
-}
-
-static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data) {
-  if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-    esp_wifi_connect();
-  } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-    wifi_event_sta_disconnected_t *disc = (wifi_event_sta_disconnected_t *)data;
-    ESP_LOGW(TAG, "STA disconnected, reason=%d", disc->reason);
-    esp_wifi_connect();
-  } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-    xEventGroupSetBits(s_wifi_ev, BIT0);
+    (void)sendto(sock, tx, p, 0, (struct sockaddr *)&from, fromlen);
   }
 }
 
-void wifi_sta(const char *ssid, const char *pass) {
-  ESP_ERROR_CHECK(esp_netif_init());
-  ESP_ERROR_CHECK(esp_event_loop_create_default());
+void http_server(bool ap_mode) {
+  httpd_handle_t httpd;
+  httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
 
-  esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
-  ESP_ERROR_CHECK(esp_wifi_init(&(wifi_init_config_t)WIFI_INIT_CONFIG_DEFAULT()));
+  cfg.max_uri_handlers = 24;
+  ESP_ERROR_CHECK(httpd_start(&httpd, &cfg));
 
-  esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-  ESP_ERROR_CHECK(esp_netif_set_hostname(sta, hostname));
+  httpd_uri_t u_root  = { .uri = "/", .method = HTTP_GET, .handler = root_get };
+  httpd_uri_t u_save  = { .uri = "/save", .method = HTTP_POST, .handler = save_post };
+  httpd_uri_t u_reset = { .uri = "/reset", .method = HTTP_POST, .handler = reset_post };
+  ESP_ERROR_CHECK(httpd_register_uri_handler(httpd, &u_root));
+  ESP_ERROR_CHECK(httpd_register_uri_handler(httpd, &u_save));
+  ESP_ERROR_CHECK(httpd_register_uri_handler(httpd, &u_reset));
 
-  wifi_config_t wifi = { 0 };
-  snprintf((char *)wifi.sta.ssid, sizeof(wifi.sta.ssid), "%s", ssid);
-  snprintf((char *)wifi.sta.password, sizeof(wifi.sta.password), "%s", pass);
-  wifi.sta.scan_method        = WIFI_ALL_CHANNEL_SCAN;
-  wifi.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+  if (ap_mode) {
+    static const char *captive_paths[] = {
+      "/generate_204",
+      "/gen_204",
+      "/ncsi.txt",
+      "/connecttest.txt",
+      "/hotspot-detect.html",
+      "/library/test/success.html",
+      "/success.txt",
+      "/favicon.ico",
+      "/redirect",
+    };
 
-  s_wifi_ev = xEventGroupCreate();
-
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi));
-  ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
-  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
-  ESP_ERROR_CHECK(esp_wifi_start());
-
-  xEventGroupWaitBits(s_wifi_ev, BIT0, false, true, portMAX_DELAY);
-
-  esp_netif_ip_info_t ip;
-
-  if (esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK) {
-    ESP_LOGI(TAG, "STA IP: " IPSTR, IP2STR(&ip.ip));
+    for (int i = 0; i < sizeof(captive_paths) / sizeof(captive_paths[0]); i++) {
+      httpd_uri_t u = { .uri = captive_paths[i], .method = HTTP_GET, .handler = redirect_root };
+      httpd_register_uri_handler(httpd, &u);
+    }
   }
 
-  http_server(false);
+  ESP_LOGI(TAG, "HTTP server started");
 }
