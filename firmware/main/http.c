@@ -9,6 +9,7 @@ extern char ssid[32];
 extern char pass[32];
 extern char name[32];
 extern char server[16];
+extern char hostname[16];
 
 static const char *TAG = "HTTP";
 
@@ -29,21 +30,19 @@ static const char *HTML_PAGE_TEMPLATE = HTML_PRE
   ".hint{opacity:.75;font-size:13px;margin-top:10px;line-height:1.4}"
   ".danger{background:#ffd8d8}"
   "</style></head><body>"
-  "<h2>damppi setup</h2>"
+  "<h2>%s Configuration</h2>"
   "<div class='card'>"
   "<form method='POST' action='/save'>"
   "<div class='row'>"
   "<div><label>Wi-Fi SSID</label><input name='ssid' required maxlength='31' value='%s'/></div>"
-  "<div><label>Wi-Fi Password</label><input name='pass' maxlength='31' value='%s'/></div>"
+  "<div><label>Wi-Fi Password</label><input name='pass' required maxlength='31' value='%s'/></div>"
   "</div>"
   "<div class='row'>"
   "<div><label>Device Name</label><input name='name' required maxlength='31' value='%s'/></div>"
-  "<div><label>Server</label><input name='server' required maxlength='15' value='%s'/></div>"
+  "<div><label>Server</label><input name='server' required maxlength='15' inputmode='numeric' value='%s'/></div>"
   "</div>"
   "<button type='submit'>Save</button>"
   "</form>"
-  "</div>"
-  "<div class='card' style='margin-top:12px'>"
   "<form method='POST' action='/reset' onsubmit=\"return confirm('Reset all configurations?');\">"
   "<button class='danger' type='submit'>Reset</button>"
   "</form>"
@@ -98,8 +97,8 @@ static esp_err_t send_html(httpd_req_t *req, const char *html) {
 }
 
 esp_err_t root_get(httpd_req_t *req) {
-  char out[__builtin_strlen(HTML_PAGE_TEMPLATE) + sizeof(ssid) + sizeof(pass) + sizeof(name) + sizeof(server) + 64];
-  snprintf(out, sizeof(out), HTML_PAGE_TEMPLATE, ssid, pass, name, server);
+  char out[__builtin_strlen(HTML_PAGE_TEMPLATE) + 120];
+  snprintf(out, sizeof(out), HTML_PAGE_TEMPLATE, hostname, ssid, pass, name, server);
   send_html(req, out);
   return ESP_OK;
 }
@@ -166,6 +165,7 @@ esp_err_t save_post(httpd_req_t *req) {
 
   send_html(req, HTML_OK);
   nvs_close(nvs);
+  vTaskDelay(pdMS_TO_TICKS(200));
   esp_restart();
   return ESP_OK;
 }
@@ -177,6 +177,7 @@ esp_err_t reset_post(httpd_req_t *req) {
   ESP_ERROR_CHECK(nvs_erase_all(nvs));
   ESP_ERROR_CHECK(nvs_commit(nvs));
   nvs_close(nvs);
+  vTaskDelay(pdMS_TO_TICKS(200));
   esp_restart();
   return ESP_OK;
 }

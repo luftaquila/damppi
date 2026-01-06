@@ -1,5 +1,4 @@
 #include "esp_log.h"
-#include "esp_mac.h"
 #include "esp_wifi.h"
 
 #include "lwip/ip4_addr.h"
@@ -11,6 +10,7 @@ extern char ssid[32];
 extern char pass[32];
 extern char name[32];
 extern char server[16];
+extern char hostname[16];
 
 static const char *TAG = "NET";
 
@@ -39,15 +39,13 @@ void wifi_softap(void) {
     },
   };
 
-  uint8_t mac[6];
-  ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_STA));
-  snprintf((char *)wifi.ap.ssid, sizeof(wifi.ap.ssid), "Damppi %02X%02X%02X", mac[3], mac[4], mac[5]);
+  snprintf((char *)wifi.ap.ssid, sizeof(wifi.ap.ssid), "%s", hostname);
 
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi));
   ESP_ERROR_CHECK(esp_wifi_start());
 
-  ESP_LOGI(TAG, "SoftAP SSID: '%s' IP=%s", ssid, IP2STR(&ip.ip));
+  ESP_LOGI(TAG, "SoftAP SSID: %s", wifi.ap.ssid);
 
   xTaskCreate(dns_server, "dns_server", 4096, NULL, 5, NULL);
   http_server(true);
@@ -71,6 +69,9 @@ void wifi_sta(const char *ssid, const char *pass) {
 
   esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
   ESP_ERROR_CHECK(esp_wifi_init(&(wifi_init_config_t)WIFI_INIT_CONFIG_DEFAULT()));
+
+  esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  ESP_ERROR_CHECK(esp_netif_set_hostname(sta, hostname));
 
   wifi_config_t wifi = { 0 };
   snprintf((char *)wifi.sta.ssid, sizeof(wifi.sta.ssid), "%s", ssid);
