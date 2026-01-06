@@ -7,6 +7,7 @@
 #include "driver/gpio.h"
 #include "lwip/sockets.h"
 
+esp_err_t lcd_init(void);
 void wifi_softap(void);
 void wifi_sta(const char *ssid, const char *pass);
 
@@ -44,7 +45,7 @@ static void reset_handler(void *arg) {
   }
 }
 
-static void init_reset(void) {
+static void reset_init(void) {
   const gpio_num_t pin = GPIO_NUM_9;
   gpio_config_t gpio;
 
@@ -62,7 +63,8 @@ static void init_reset(void) {
 }
 
 void app_main(void) {
-  init_reset();
+  lcd_init();
+  reset_init();
 
   ESP_ERROR_CHECK(nvs_flash_init());
   ESP_ERROR_CHECK(nvs_open("cfg", NVS_READWRITE, &nvs));
