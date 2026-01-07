@@ -4,6 +4,8 @@
 #include "esp_lvgl_port.h"
 #include "driver/gpio.h"
 
+#include "main.h"
+
 #define LCD_WIDTH 172
 #define LCD_HEIGHT 320
 #define BACKLIGHT GPIO_NUM_22
@@ -49,6 +51,10 @@ void ui_task(void *arg) {
       if (msg.text[0]) {
         lv_obj_set_style_text_font(ui_label, msg.font, 0);
         lv_label_set_text(ui_label, msg.text);
+        lv_obj_center(ui_label);
+      } else {
+        lv_obj_set_style_text_font(ui_label, LV_FONT(24), 0);
+        lv_label_set_text_fmt(ui_label, "%s", status); 
         lv_obj_center(ui_label);
       }
 

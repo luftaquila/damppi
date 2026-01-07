@@ -65,11 +65,11 @@ static void btn_handler(void *arg) {
   while (true) {
     if (xTaskNotifyWait(0, ULONG_MAX, &val, portMAX_DELAY)) {
       if (val & 1) {
-        lcd_printf(LV_FONT(30), 3000, "");
+        lcd_printf(LV_FONT(30), 3 * 1000, "");
       }
 
       if (val & 2) {
-        // TODO: Implement double click action
+        mqtt_publish();
       }
     }
   }
@@ -87,7 +87,7 @@ static void btn_init(void) {
   ESP_ERROR_CHECK(gpio_config(&gpio));
   ESP_ERROR_CHECK(gpio_isr_handler_add(GPIO_NUM_23, btn_isr, NULL));
 
-  xTaskCreate(btn_handler, "btn", 2048, NULL, 10, &btn_task);
+  xTaskCreate(btn_handler, "btn", 2048, NULL, 3, &btn_task);
 }
 
 static void reset_isr(void *arg) {

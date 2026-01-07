@@ -3,12 +3,15 @@
 
 #include "main.h"
 
+esp_err_t mqtt_init(void);
 void dns_server(void *arg);
 void http_server(bool ap_mode);
 
 static const char *TAG = "NET";
 
 static EventGroupHandle_t s_wifi_ev = NULL;
+
+char status[128];
 
 void wifi_softap(void) {
   ESP_ERROR_CHECK(esp_netif_init());
@@ -88,8 +91,10 @@ void wifi_sta(const char *ssid, const char *pass) {
 
   if (esp_netif_get_ip_info(sta_netif, &ip) == ESP_OK) {
     ESP_LOGI(TAG, "STA IP: " IPSTR, IP2STR(&ip.ip));
-    lcd_printf(LV_FONT(24), 5000, "Wi-Fi: %s\nSERVER: %s\nIP: " IPSTR "\n%s", ssid, server, IP2STR(&ip.ip), name);
+    snprintf(status, sizeof(status), "Wi-Fi: %s\nSERVER: %s\nIP: " IPSTR "\n%s", ssid, server, IP2STR(&ip.ip), name);
+    lcd_printf(LV_FONT(24), 5 * 1000, "%s", status);
   }
 
   http_server(false);
+  mqtt_init();
 }
