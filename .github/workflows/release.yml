@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build-firmware:
+    uses: ./.github/workflows/firmware.yml
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    needs: [build-firmware]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - run: zip -r damppi-${{ github.ref_name }}.zip firmware-damppi
+      - uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifacts: damppi-${{ github.ref_name }}.zip
+          commit: ${{ github.sha }}
+          tag: ${{ github.ref_name }}
+          body: |
+            ### Damppi ${{ github.ref_name }}
+            ```
+            pip install esptool
+            wget https://github.com/luftaquila/damppi/releases/download/${{ github.ref_name }}/damppi-${{ github.ref_name }}.zip
+            unzip damppi-${{ github.ref_name }}.zip
+            cd firmware-damppi
+            python -m esptool --chip esp32c6 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
+            ```
