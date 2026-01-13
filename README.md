@@ -4,24 +4,17 @@ Damppi is a pager device used to call others, physically.
 
 ## Prerequisites
 
-### Software
-
-* `git clone https://github.com/luftaquila/damppi.git`
-* [OpenSCAD](https://openscad.org/downloads.html) (nightly build recommended).
-* [ESP-IDF (Manual Installation)](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html#manual-installation)
-
-### Hardware
-
 * 1x Waveshare ESP32-C6-LCD-1.47
 * 1x Cherry MX compatible mechanical keyboard switch
 * 4x M2 8mm bolts
 * 3D printed housing
+    * Install [OpenSCAD](https://openscad.org/downloads.html) (nightly build recommended).
     * Run the following commands to generate `top.stl` and `bottom.stl`:
-
-```sh
-cd damppi/3d
-make
-```
+    ```sh
+    git clone https://github.com/luftaquila/damppi.git
+    cd damppi/3d
+    make
+    ```
 
 ## Assembly
 
@@ -31,15 +24,12 @@ make
 1. Solder the wires to the MX switch.
 1. Glue the top and bottom housing together.
 
+> [!IMPORTANT]
+> The MX switch must be soldered AFTER it is installed to the top housing.
+
 ## Firmware
 
-1. Connect the device to PC via USB cable.
-1. Run following commands:
-
-```sh
-cd damppi/firmware
-make flash
-```
+Follow the instructions at the [latest release](https://github.com/luftaquila/damppi/releases/latest).
 
 ## Usage
 
@@ -59,6 +49,7 @@ The device requires an MQTT broker to communicate.
 Run following commands to host a broker:
 
 ```sh
+git clone https://github.com/luftaquila/damppi.git
 cd damppi
 sudo docker compose up -d
 ```

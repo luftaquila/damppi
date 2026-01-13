@@ -26,6 +26,7 @@ jobs:
           tag: ${{ github.ref_name }}
           body: |
             ### Damppi ${{ github.ref_name }}
+            Connect the device to PC via USB cable and run the following commands.
             ```
             pip install esptool
             wget https://github.com/luftaquila/damppi/releases/download/${{ github.ref_name }}/damppi-${{ github.ref_name }}.zip
